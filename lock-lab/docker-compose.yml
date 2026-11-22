@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: locklab-db
+    environment:
+      POSTGRES_DB: locklab
+      POSTGRES_USER: locklab
+      POSTGRES_PASSWORD: locklab
+      # 让死锁检测尽快触发（应用内也按会话 SET，可在此统一调）
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    command:
+      - "postgres"
+      - "-c"
+      - "deadlock_timeout=500ms"
+      - "-c"
+      - "log_lock_waits=on"
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - locklab-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U locklab -d locklab"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build: ./app
+    container_name: locklab-web
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: locklab
+      PGUSER: locklab
+      PGPASSWORD: locklab
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  locklab-pgdata:
